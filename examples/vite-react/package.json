@@ -1,0 +1,24 @@
+{
+  "name": "pretext-widget-vite-example",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Minimal Vite + React + TypeScript example showing how to integrate @kneox-lab/pretext-widget on your own site.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@kneox-lab/pretext-widget": "github:Kneox-Lab/pretext-widget-react",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

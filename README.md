@@ -166,6 +166,22 @@ Safe to import in server components. The `useEffect` only runs in the
 browser, so SSR is a no-op. The `"use client"` banner is preserved in the
 build for Next 13+ App Router compatibility.
 
+## Working example
+
+A complete Vite + React + TypeScript example is in
+[`examples/vite-react/`](./examples/vite-react). Clone the repo and run:
+
+```bash
+git clone https://github.com/Kneox-Lab/pretext-widget-react.git
+cd pretext-widget-react/examples/vite-react
+npm install
+npm run dev
+```
+
+The example surfaces a live error banner when the widget can't mount
+(suspended account, monthly cap reached, origin not whitelisted, etc.) so
+you can debug integration issues without guessing.
+
 ## License
 
 MIT © kneox lab
