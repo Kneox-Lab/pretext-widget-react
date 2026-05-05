@@ -3,3 +3,8 @@ dist/
 *.log
 .DS_Store
 .vite/
+# Lock file changes on every re-install because the github source
+# resolves to the current HEAD SHA. Keep it untracked so commits
+# don't churn between test cycles. Customers regenerate their own
+# lock on first `npm install`.
+package-lock.json
