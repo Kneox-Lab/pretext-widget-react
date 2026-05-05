@@ -27,13 +27,36 @@ corner.
 - Re-mount on `context` change (the dependency array inside
   `PretextWidget` handles it; just change the input value and watch
   the bubble cycle).
+- Free-form `variables` JSON to test what ends up in the agent's
+  context (and on the conversation detail page in your dashboard
+  under "visitor metadata").
+- HMAC-verified `identity` with the user hash computed in-browser
+  via Web Crypto. **This is for testing only** — see below for the
+  production pattern.
+- Below the test interface, three ready-to-copy snippets showing
+  the **production-ready integration** for a Next.js App Router
+  site: backend route that computes the HMAC server-side, React
+  component that fetches identity + variables, and how to mount it
+  in the layout.
+
+## Test mode vs production mode
+
+The page above the "production-ready" code block runs the HMAC in
+your browser using Web Crypto. **Don't ever do that in real
+customer code** — the widget secret would leak to anyone who can
+view-source on your page. Use it only on a localhost test page you
+control.
+
+The production pattern (the three numbered snippets at the bottom)
+keeps the secret on your backend, exposes only `(userId, userHash)`
+through an authenticated API route, and the React component fetches
+that on mount.
 
 ## What it doesn't cover
 
-- Verified identity (HMAC). See the main README for the snippet.
 - Imperative API (`setPretextVariables`, `setPretextIdentity`,
   `setPretextUserToken`). Useful when values land asynchronously
-  after the initial mount.
+  after the initial mount. See the main README.
 
 ## Adapting to Next.js
 

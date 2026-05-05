@@ -12,6 +12,31 @@ import { PretextWidget } from "@kneox-lab/pretext-widget";
 const HOST = "https://pretext.kneox-lab.com";
 const STORAGE_ID = "pretext-example-client-id";
 const STORAGE_CTX = "pretext-example-context";
+const STORAGE_VARS = "pretext-example-variables";
+const STORAGE_USER = "pretext-example-user-id";
+const STORAGE_SECRET = "pretext-example-widget-secret";
+
+/**
+ * Compute HMAC-SHA256(secret, `${clientId}|${userId}`) in the
+ * browser using Web Crypto. In production this MUST happen on your
+ * backend — keeping the widget secret in client-side code defeats
+ * the whole point. We only do it here because it's a localhost test
+ * app the operator runs themselves.
+ */
+async function computeUserHash(secret: string, clientId: string, userId: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${clientId}|${userId}`));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 /**
  * Live status of the widget mount. We probe `/api/widget-config`
@@ -36,13 +61,90 @@ export function App() {
   const [context, setContext] = useState<string>(
     () => window.localStorage.getItem(STORAGE_CTX) ?? "",
   );
+  // Free-form JSON the operator pastes (or types) to test what
+  // ends up in conversations.last_visitor_variables on the dashboard.
+  const [variablesText, setVariablesText] = useState<string>(
+    () => window.localStorage.getItem(STORAGE_VARS) ?? "",
+  );
+  // HMAC-verified identity (optional). The widget secret must match
+  // the one shown in /dashboard/prompt → security on pretext. We
+  // compute the hash in-browser via Web Crypto for this test app
+  // ONLY — never do this in real customer code, the secret would
+  // leak. Production: hash on your backend, send (userId, userHash)
+  // to your frontend, pass to PretextWidget.
+  const [userId, setUserId] = useState<string>(
+    () => window.localStorage.getItem(STORAGE_USER) ?? "",
+  );
+  const [widgetSecret, setWidgetSecret] = useState<string>(
+    () => window.localStorage.getItem(STORAGE_SECRET) ?? "",
+  );
+  const [computedHash, setComputedHash] = useState<string>("");
+  const [hashError, setHashError] = useState<string>("");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
   // Persist inputs so a refresh keeps the same setup.
   useEffect(() => {
     window.localStorage.setItem(STORAGE_ID, clientId);
     window.localStorage.setItem(STORAGE_CTX, context);
-  }, [clientId, context]);
+    window.localStorage.setItem(STORAGE_VARS, variablesText);
+    window.localStorage.setItem(STORAGE_USER, userId);
+    window.localStorage.setItem(STORAGE_SECRET, widgetSecret);
+  }, [clientId, context, variablesText, userId, widgetSecret]);
+
+  // Recompute the HMAC hash whenever the inputs change. Async via
+  // Web Crypto, debounced naturally because subtle.sign returns
+  // quickly enough on a single short string.
+  useEffect(() => {
+    const trimmedSecret = widgetSecret.trim();
+    const trimmedUser = userId.trim();
+    const trimmedClient = clientId.trim();
+    if (!trimmedSecret || !trimmedUser || !trimmedClient) {
+      setComputedHash("");
+      setHashError("");
+      return;
+    }
+    let cancelled = false;
+    computeUserHash(trimmedSecret, trimmedClient, trimmedUser)
+      .then((hash) => {
+        if (cancelled) return;
+        setComputedHash(hash);
+        setHashError("");
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setComputedHash("");
+        setHashError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [widgetSecret, userId, clientId]);
+
+  // Parse the variables JSON. Empty input = undefined (no variables
+  // sent). Invalid JSON = error shown next to the input but we don't
+  // unmount the widget — it still works without variables.
+  const { parsedVariables, variablesError } = useMemo(() => {
+    const raw = variablesText.trim();
+    if (!raw) return { parsedVariables: undefined, variablesError: null };
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return { parsedVariables: undefined, variablesError: "Must be a JSON object." };
+      }
+      // Coerce all values to strings (the widget API accepts string |
+      // number | boolean; pretext stringifies server-side anyway).
+      const coerced: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        coerced[k] = String(v);
+      }
+      return { parsedVariables: coerced, variablesError: null };
+    } catch (e) {
+      return {
+        parsedVariables: undefined,
+        variablesError: `Invalid JSON: ${(e as Error).message}`,
+      };
+    }
+  }, [variablesText]);
 
   // Independent probe of /api/widget-config. Same endpoint the
   // widget hits internally on mount; we ping it ourselves so the
@@ -154,9 +256,25 @@ export function App() {
           placeholder='e.g. "app" or "landing"'
           hint="Filters retrieval to KB files tagged with this context. Leave empty to use the full knowledge base."
         />
+        <VariablesInput
+          value={variablesText}
+          onChange={setVariablesText}
+          error={variablesError}
+        />
       </section>
 
+      <IdentitySection
+        userId={userId}
+        setUserId={setUserId}
+        widgetSecret={widgetSecret}
+        setWidgetSecret={setWidgetSecret}
+        computedHash={computedHash}
+        hashError={hashError}
+      />
+
       <StatusBanner status={status} />
+
+      <ProductionExample clientId={trimmedClientId || "your-client-id"} />
 
       {widgetActive && (
         // `host` is omitted on purpose — the package defaults to the
@@ -165,6 +283,12 @@ export function App() {
         <PretextWidget
           clientId={trimmedClientId}
           context={trimmedContext || undefined}
+          variables={parsedVariables}
+          identity={
+            computedHash && userId.trim()
+              ? { userId: userId.trim(), userHash: computedHash }
+              : null
+          }
         />
       )}
     </main>
@@ -234,6 +358,165 @@ function Input({
           {hint}
         </span>
       )}
+    </label>
+  );
+}
+
+function IdentitySection({
+  userId,
+  setUserId,
+  widgetSecret,
+  setWidgetSecret,
+  computedHash,
+  hashError,
+}: {
+  userId: string;
+  setUserId: (v: string) => void;
+  widgetSecret: string;
+  setWidgetSecret: (v: string) => void;
+  computedHash: string;
+  hashError: string;
+}) {
+  return (
+    <section
+      style={{
+        marginTop: 32,
+        padding: 16,
+        background: "#fef9c3",
+        border: "1px solid #fde047",
+        borderRadius: 6,
+      }}
+    >
+      <header style={{ marginBottom: 12 }}>
+        <code
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.04em",
+            color: "#854d0e",
+            textTransform: "uppercase",
+          }}
+        >
+          verified identity (HMAC) · test only
+        </code>
+        <p
+          style={{
+            fontSize: 12,
+            color: "#713f12",
+            margin: "6px 0 0",
+            lineHeight: 1.5,
+          }}
+        >
+          The agent treats `userId` as authoritative when a valid
+          HMAC hash accompanies it. We compute the hash in-browser
+          here for testing convenience. In production, hash on your
+          backend so the secret never leaves your server.
+        </p>
+      </header>
+      <div style={{ display: "grid", gap: 12 }}>
+        <Input
+          label="user id (your visitor's id)"
+          value={userId}
+          onChange={setUserId}
+          placeholder="e.g. user-42, alice@example.com"
+        />
+        <Input
+          label="widget secret (from /dashboard/prompt → security)"
+          value={widgetSecret}
+          onChange={setWidgetSecret}
+          placeholder="paste the 64-char hex secret"
+          hint="Visible in your pretext dashboard. Stored in localStorage on this test page only."
+        />
+        <div>
+          <span
+            style={{
+              display: "block",
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.04em",
+              color: "#854d0e",
+              textTransform: "uppercase",
+              marginBottom: 4,
+            }}
+          >
+            computed userHash (HMAC-SHA256)
+          </span>
+          <code
+            style={{
+              display: "block",
+              padding: "8px 10px",
+              background: "#fff",
+              border: "1px solid #fde047",
+              borderRadius: 4,
+              fontSize: 11.5,
+              wordBreak: "break-all",
+              color: hashError ? "#991b1b" : computedHash ? "#166534" : "#a1a1aa",
+              minHeight: "1.5em",
+            }}
+          >
+            {hashError || computedHash || "fill in user id + widget secret"}
+          </code>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function VariablesInput({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  error: string | null;
+}) {
+  return (
+    <label style={{ display: "block" }}>
+      <span
+        style={{
+          display: "block",
+          fontSize: 12,
+          fontWeight: 500,
+          letterSpacing: "0.04em",
+          color: "#71717a",
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        variables (optional, JSON)
+      </span>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder='{ "plan": "premium", "country": "FR" }'
+        spellCheck={false}
+        rows={4}
+        style={{
+          width: "100%",
+          padding: "10px 12px",
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          fontSize: 13,
+          color: "#18181b",
+          background: "#fff",
+          border: `1px solid ${error ? "#dc2626" : "#e4e4e7"}`,
+          borderRadius: 6,
+          outline: "none",
+          resize: "vertical",
+        }}
+      />
+      <span
+        style={{
+          display: "block",
+          fontSize: 11.5,
+          color: error ? "#dc2626" : "#a1a1aa",
+          marginTop: 4,
+          lineHeight: 1.45,
+        }}
+      >
+        {error
+          ? error
+          : "Forwarded to the agent's context. Each value gets stringified server-side. Visible on the conversation detail page (visitor metadata block)."}
+      </span>
     </label>
   );
 }
@@ -336,6 +619,299 @@ function describeStatus(status: Status): StatusUI | null {
         detail: status.detail,
       };
   }
+}
+
+/**
+ * Production-ready integration example. Three numbered code blocks
+ * showing how to wire the widget on a real Next.js / React site
+ * with verified identity. The current page above is a TEST harness
+ * (web-crypto in browser, secret in localStorage) — do not copy
+ * that for a real customer deploy. Copy what's below instead.
+ */
+function ProductionExample({ clientId }: { clientId: string }) {
+  const backendCode =
+`// app/api/widget-identity/route.ts (Next.js App Router)
+import { createHmac } from "node:crypto";
+
+const PRETEXT_CLIENT_ID = process.env.PRETEXT_CLIENT_ID!;
+const PRETEXT_WIDGET_SECRET = process.env.PRETEXT_WIDGET_SECRET!;
+
+export async function GET() {
+  // Replace with your real auth (next-auth, custom session, JWT, etc.)
+  const session = await getSession();
+  if (!session) {
+    // Anonymous visitor: no verified identity, no variables.
+    return Response.json({ identity: null, variables: {} });
+  }
+
+  // HMAC-SHA256(secret, "<clientId>|<userId>") in hex.
+  const userHash = createHmac("sha256", PRETEXT_WIDGET_SECRET)
+    .update(\`\${PRETEXT_CLIENT_ID}|\${session.userId}\`)
+    .digest("hex");
+
+  return Response.json({
+    identity: { userId: session.userId, userHash },
+    variables: {
+      // Anything you want the agent to see. Strings only.
+      plan: session.plan ?? "free",
+      country: session.country ?? "FR",
+      cart_items: String(session.cart?.length ?? 0),
+    },
+  });
+}`;
+
+  const componentCode =
+`// components/ChatWidget.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import { PretextWidget } from "@kneox-lab/pretext-widget";
+
+type Identity = { userId: string; userHash: string } | null;
+type Vars = Record<string, string>;
+
+export function ChatWidget() {
+  const [identity, setIdentity] = useState<Identity>(null);
+  const [variables, setVariables] = useState<Vars>({});
+
+  useEffect(() => {
+    fetch("/api/widget-identity")
+      .then((r) => r.json())
+      .then((data: { identity: Identity; variables: Vars }) => {
+        setIdentity(data.identity);
+        setVariables(data.variables);
+      })
+      .catch(() => {
+        // Anon fallback: widget still mounts, just without
+        // verified identity / variables.
+      });
+  }, []);
+
+  return (
+    <PretextWidget
+      clientId="${clientId}"
+      identity={identity}
+      variables={variables}
+    />
+  );
+}`;
+
+  const layoutCode =
+`// app/layout.tsx
+import { ChatWidget } from "@/components/ChatWidget";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="fr">
+      <body>
+        {children}
+        <ChatWidget />
+      </body>
+    </html>
+  );
+}`;
+
+  return (
+    <section
+      style={{
+        marginTop: 56,
+        padding: 20,
+        background: "#fafafa",
+        border: "1px solid #e4e4e7",
+        borderRadius: 8,
+      }}
+    >
+      <header style={{ marginBottom: 16 }}>
+        <code
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.04em",
+            color: "#71717a",
+            textTransform: "uppercase",
+          }}
+        >
+          production-ready integration · copy / paste
+        </code>
+        <h2
+          style={{
+            fontSize: 20,
+            fontWeight: 700,
+            margin: "6px 0 0",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Real customer setup
+        </h2>
+        <p
+          style={{
+            fontSize: 13,
+            color: "#52525b",
+            margin: "8px 0 0",
+            lineHeight: 1.55,
+          }}
+        >
+          The form above runs the HMAC in your browser for testing.
+          Production must compute the hash server-side so the widget
+          secret never reaches the browser. Three pieces below for a
+          Next.js App Router site. Adapt to your stack as needed.
+        </p>
+        <p
+          style={{
+            fontSize: 12,
+            color: "#71717a",
+            margin: "8px 0 0",
+            lineHeight: 1.5,
+          }}
+        >
+          Set <code>PRETEXT_CLIENT_ID</code> and{" "}
+          <code>PRETEXT_WIDGET_SECRET</code> in your env (server-side
+          only, never expose to the client). The secret comes from
+          your pretext dashboard at{" "}
+          <code>/dashboard/prompt → security</code>.
+        </p>
+      </header>
+
+      <NumberedCode
+        n={1}
+        title="Backend route — computes the HMAC"
+        language="ts"
+        code={backendCode}
+      />
+      <NumberedCode
+        n={2}
+        title="React component — fetches identity, mounts the widget"
+        language="tsx"
+        code={componentCode}
+      />
+      <NumberedCode
+        n={3}
+        title="Use it in your layout"
+        language="tsx"
+        code={layoutCode}
+      />
+    </section>
+  );
+}
+
+function NumberedCode({
+  n,
+  title,
+  code,
+  language,
+}: {
+  n: number;
+  title: string;
+  code: string;
+  language: string;
+}) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 8,
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            width: 22,
+            height: 22,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 4,
+            background: "#dcfce7",
+            color: "#166534",
+            fontSize: 11,
+            fontWeight: 700,
+            fontFamily: "ui-monospace, monospace",
+          }}
+        >
+          {n}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#18181b" }}>
+          {title}
+        </span>
+        <span
+          style={{
+            marginLeft: "auto",
+            fontSize: 10,
+            letterSpacing: "0.04em",
+            color: "#a1a1aa",
+            textTransform: "uppercase",
+          }}
+        >
+          {language}
+        </span>
+      </div>
+      <CopyableCode code={code} />
+    </div>
+  );
+}
+
+function CopyableCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard
+      .writeText(code)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {
+        // clipboard API can fail on insecure origins or denied perms.
+        // Ignore silently — the user can still ctrl-c manually.
+      });
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <pre
+        style={{
+          background: "#18181b",
+          color: "#e4e4e7",
+          padding: "14px 16px",
+          paddingTop: 38,
+          borderRadius: 6,
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          fontSize: 12,
+          lineHeight: 1.5,
+          overflowX: "auto",
+          margin: 0,
+          whiteSpace: "pre",
+        }}
+      >
+        <code>{code}</code>
+      </pre>
+      <button
+        type="button"
+        onClick={handleCopy}
+        style={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          padding: "4px 10px",
+          fontSize: 11,
+          fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
+          background: copied ? "#166534" : "#27272a",
+          color: copied ? "#bbf7d0" : "#e4e4e7",
+          border: "1px solid #3f3f46",
+          borderRadius: 4,
+          cursor: "pointer",
+          transition: "background 0.15s, color 0.15s",
+        }}
+      >
+        {copied ? "copied" : "copy"}
+      </button>
+    </div>
+  );
 }
 
 /** Map server-side `unavailableReason` codes to human sentences. */
