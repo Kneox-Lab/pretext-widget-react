@@ -33,10 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html>
       <body>
         {children}
-        <PretextWidget
-          host="https://pretext.kneox-lab.com"
-          clientId="your-client-id"
-        />
+        <PretextWidget clientId="your-client-id" />
       </body>
     </html>
   );
@@ -46,6 +43,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 That's it. A floating chat bubble appears in the bottom-right corner. Click it
 to open the chat. Get your `clientId` from your pretext dashboard at
 `/dashboard/embed`.
+
+> Self-hosted pretext? Add `host="https://your-pretext-deploy.example"`. The
+> SaaS deploy at `pretext.kneox-lab.com` is the default.
 
 ## Multi-context (Pro+)
 
@@ -141,8 +141,8 @@ setPretextUserToken(newJwt);
 
 | Prop | Type | Required | Description |
 |---|---|---|---|
-| `host` | `string` | yes | Pretext host URL (no trailing slash) |
 | `clientId` | `string` | yes | Your pretext client id |
+| `host` | `string` | no | Pretext host URL. Defaults to `https://pretext.kneox-lab.com`. Override for self-hosted deploys. |
 | `context` | `string` | no | KB context tag (Pro+ feature) |
 | `identity` | `{ userId, userHash } \| null` | no | HMAC-signed visitor identity |
 | `variables` | `Record<string, string \| number \| boolean>` | no | Session context for the agent |

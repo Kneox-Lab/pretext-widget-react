@@ -3,20 +3,25 @@
 import { useEffect } from "react";
 
 /**
+ * Default host: the public SaaS pretext deploy. Customers on a
+ * self-hosted pretext can override via the `host` prop.
+ */
+const DEFAULT_HOST = "https://pretext.kneox-lab.com";
+
+/**
  * Props for the PretextWidget component.
  *
- * Most apps only need `host` + `clientId`. Everything else is
- * optional and matches what you can pass on a plain `<script>` tag
- * (data-context, data-user-*, data-var-*).
+ * Most apps only need `clientId` — everything else is optional.
+ * Self-hosters set `host` to point at their own pretext deploy;
+ * SaaS customers can omit it entirely.
  */
 export type PretextWidgetProps = {
   /**
-   * Where the pretext API is hosted. Use the value pretext gives you
-   * on /dashboard/embed (typically `https://pretext.kneox-lab.com`
-   * for SaaS customers, or your own host for self-deployed clients).
-   * No trailing slash needed.
+   * Where the pretext API is hosted. Defaults to the SaaS deploy
+   * (`https://pretext.kneox-lab.com`). Override only if you run
+   * pretext yourself. No trailing slash needed.
    */
-  host: string;
+  host?: string;
 
   /**
    * Your pretext client id. Visible at the bottom of /dashboard/embed.
@@ -91,7 +96,7 @@ const SLOT_KEY = "__pretextChatAgent";
  * data attributes off the script tag.
  */
 export function PretextWidget({
-  host,
+  host = DEFAULT_HOST,
   clientId,
   context,
   identity,

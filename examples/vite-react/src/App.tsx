@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { PretextWidget } from "@kneox-lab/pretext-widget";
 
+// `host` defaults to the SaaS pretext deploy in the package itself,
+// so a customer's <PretextWidget> doesn't need to repeat it. We
+// only need it here for the independent /api/widget-config probe
+// that powers the status banner — that fetch is host-agnostic on
+// our side and could just as easily target a self-hosted deploy if
+// the user changed it in their /dashboard/embed setup. Kept hard-
+// coded for the example because it's clear enough as a teaching
+// reference.
 const HOST = "https://pretext.kneox-lab.com";
 const STORAGE_ID = "pretext-example-client-id";
 const STORAGE_CTX = "pretext-example-context";
@@ -151,8 +159,10 @@ export function App() {
       <StatusBanner status={status} />
 
       {widgetActive && (
+        // `host` is omitted on purpose — the package defaults to the
+        // SaaS deploy. Set it explicitly only when you self-host
+        // pretext on your own domain.
         <PretextWidget
-          host={HOST}
           clientId={trimmedClientId}
           context={trimmedContext || undefined}
         />
