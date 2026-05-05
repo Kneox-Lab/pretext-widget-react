@@ -274,7 +274,10 @@ export function App() {
 
       <StatusBanner status={status} />
 
-      <ProductionExample clientId={trimmedClientId || "your-client-id"} />
+      <ProductionExample
+        clientId={trimmedClientId || "your-client-id"}
+        variables={parsedVariables}
+      />
 
       {widgetActive && (
         // `host` is omitted on purpose — the package defaults to the
@@ -627,8 +630,44 @@ function describeStatus(status: Status): StatusUI | null {
  * with verified identity. The current page above is a TEST harness
  * (web-crypto in browser, secret in localStorage) — do not copy
  * that for a real customer deploy. Copy what's below instead.
+ *
+ * Reflects the actual variable keys the user tested above (when any)
+ * so the copied code maps 1:1 to their experiment. Default sample
+ * (plan / country / cart_items) shows up only when no variables
+ * are set on the test page.
  */
-function ProductionExample({ clientId }: { clientId: string }) {
+function ProductionExample({
+  clientId,
+  variables,
+}: {
+  clientId: string;
+  variables: Record<string, string> | undefined;
+}) {
+  // Build the `variables: { ... }` block in the backend code,
+  // reusing the keys the user typed in the test page above. Shows
+  // the connection between "what I just tested" and "what I'd
+  // write in production". Falls back to a generic example when no
+  // variables were entered.
+  const variablesBlock = (() => {
+    const keys = variables ? Object.keys(variables) : [];
+    if (keys.length === 0) {
+      return `      // Anything you want the agent to see. Strings only.
+      plan: session.plan ?? "free",
+      country: session.country ?? "FR",
+      cart_items: String(session.cart?.length ?? 0),`;
+    }
+    // Identifier-safe keys can be written without quotes; otherwise
+    // we'd need to quote them. Same shape either way works in JS.
+    const lines = keys.map((k) => {
+      const safe = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k);
+      const left = safe ? k : JSON.stringify(k);
+      return `      ${left}: session.${safe ? k : `[${JSON.stringify(k)}]`} ?? "",`;
+    });
+    return `      // Keys taken from your test above. Replace the right side
+      // with whatever you actually have on \`session\` / your DB.
+${lines.join("\n")}`;
+  })();
+
   const backendCode =
 `// app/api/widget-identity/route.ts (Next.js App Router)
 import { createHmac } from "node:crypto";
@@ -652,10 +691,7 @@ export async function GET() {
   return Response.json({
     identity: { userId: session.userId, userHash },
     variables: {
-      // Anything you want the agent to see. Strings only.
-      plan: session.plan ?? "free",
-      country: session.country ?? "FR",
-      cart_items: String(session.cart?.length ?? 0),
+${variablesBlock}
     },
   });
 }`;
@@ -716,41 +752,52 @@ export default function RootLayout({
 }`;
 
   return (
-    <section
+    <details
       style={{
-        marginTop: 56,
-        padding: 20,
+        marginTop: 32,
         background: "#fafafa",
         border: "1px solid #e4e4e7",
         borderRadius: 8,
       }}
     >
-      <header style={{ marginBottom: 16 }}>
-        <code
+      <summary
+        style={{
+          padding: "14px 18px",
+          cursor: "pointer",
+          listStyle: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          userSelect: "none",
+        }}
+      >
+        <span
           style={{
             fontSize: 11,
             letterSpacing: "0.04em",
             color: "#71717a",
             textTransform: "uppercase",
+            fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
           }}
         >
-          production-ready integration · copy / paste
-        </code>
-        <h2
+          production-ready code · copy / paste
+        </span>
+        <span
           style={{
-            fontSize: 20,
-            fontWeight: 700,
-            margin: "6px 0 0",
-            letterSpacing: "-0.01em",
+            marginLeft: "auto",
+            fontSize: 11,
+            color: "#a1a1aa",
           }}
         >
-          Real customer setup
-        </h2>
+          click to expand
+        </span>
+      </summary>
+      <div style={{ padding: "0 20px 20px", borderTop: "1px solid #e4e4e7" }}>
         <p
           style={{
             fontSize: 13,
             color: "#52525b",
-            margin: "8px 0 0",
+            margin: "16px 0 0",
             lineHeight: 1.55,
           }}
         >
@@ -763,7 +810,7 @@ export default function RootLayout({
           style={{
             fontSize: 12,
             color: "#71717a",
-            margin: "8px 0 0",
+            margin: "8px 0 16px",
             lineHeight: 1.5,
           }}
         >
@@ -773,27 +820,27 @@ export default function RootLayout({
           your pretext dashboard at{" "}
           <code>/dashboard/prompt → security</code>.
         </p>
-      </header>
 
-      <NumberedCode
-        n={1}
-        title="Backend route — computes the HMAC"
-        language="ts"
-        code={backendCode}
-      />
-      <NumberedCode
-        n={2}
-        title="React component — fetches identity, mounts the widget"
-        language="tsx"
-        code={componentCode}
-      />
-      <NumberedCode
-        n={3}
-        title="Use it in your layout"
-        language="tsx"
-        code={layoutCode}
-      />
-    </section>
+        <NumberedCode
+          n={1}
+          title="Backend route — computes the HMAC"
+          language="ts"
+          code={backendCode}
+        />
+        <NumberedCode
+          n={2}
+          title="React component — fetches identity, mounts the widget"
+          language="tsx"
+          code={componentCode}
+        />
+        <NumberedCode
+          n={3}
+          title="Use it in your layout"
+          language="tsx"
+          code={layoutCode}
+        />
+      </div>
+    </details>
   );
 }
 
