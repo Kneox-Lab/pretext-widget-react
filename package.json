@@ -1,0 +1,60 @@
+{
+  "name": "@kneox-lab/pretext-widget",
+  "version": "0.1.0",
+  "description": "React wrapper for the pretext chat widget. Drop a typed component in your Next.js / Vite / React app instead of a <script> tag.",
+  "license": "MIT",
+  "author": "kneox lab <support@kneox-lab.com>",
+  "homepage": "https://pretext.kneox-lab.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kneox-Lab/pretext-widget-react.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kneox-Lab/pretext-widget-react/issues"
+  },
+  "keywords": [
+    "chat",
+    "chatbot",
+    "ai",
+    "agent",
+    "widget",
+    "react",
+    "nextjs",
+    "pretext"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
