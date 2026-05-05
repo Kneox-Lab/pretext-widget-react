@@ -9,12 +9,9 @@ export default defineConfig({
   // External React so consumers' bundlers wire the right copy. Listed
   // as a peerDependency in package.json — host app provides React.
   external: ["react"],
-  // Preserve the "use client" directive at the top of the bundle so
-  // Next 13+ App Router consumers don't try to render the component
-  // server-side. tsup wraps it correctly when banner is set.
-  banner: {
-    js: '"use client";',
-  },
+  // The "use client" directive lives in src/index.tsx and tsup
+  // preserves it through the build. Don't add a banner here, or it
+  // gets emitted twice (harmless but ugly in the output).
   // Don't minify — small enough that readability + good stack traces
   // win over a few hundred bytes saved.
   minify: false,
