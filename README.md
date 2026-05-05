@@ -54,10 +54,10 @@ to a subset of your KB by passing `context`:
 
 ```tsx
 // On your marketing landing
-<PretextWidget host="..." clientId="..." context="landing" />
+<PretextWidget clientId="..." context="landing" />
 
 // On your in-app pages
-<PretextWidget host="..." clientId="..." context="app" />
+<PretextWidget clientId="..." context="app" />
 ```
 
 The agent only sees KB files tagged with this context (plus untagged "shared"
@@ -86,7 +86,6 @@ Then pass it to the component:
 
 ```tsx
 <PretextWidget
-  host="..."
   clientId="..."
   identity={{ userId: user.id, userHash }}
 />
@@ -101,7 +100,6 @@ Inject any session info into the agent's context:
 
 ```tsx
 <PretextWidget
-  host="..."
   clientId="..."
   variables={{
     plan: user.plan,
