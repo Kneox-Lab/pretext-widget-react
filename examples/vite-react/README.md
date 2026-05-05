@@ -49,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         {children}
-        <PretextWidget host="https://pretext.kneox-lab.com" clientId="..." />
+        <PretextWidget clientId="..." />
       </body>
     </html>
   );
@@ -58,3 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 `"use client"` is preserved in the package's bundle, so the App
 Router treats the component as a client component automatically.
+
+> Self-hosting pretext on your own domain? Add
+> `host="https://your-deploy.example"`. The default points at the
+> SaaS deploy at `pretext.kneox-lab.com`.
