@@ -44,6 +44,13 @@ That's it. A floating chat bubble appears in the bottom-right corner. Click it
 to open the chat. Get your `clientId` from your pretext dashboard at
 `/dashboard/embed`.
 
+The chat panel:
+- Autofocuses its text input the moment it opens so visitors can start typing
+  immediately, no extra tap.
+- Adapts to mobile viewports automatically: a near-fullscreen overlay on
+  screens narrower than 640px, the standard floating card on desktop. The
+  input is pinned at 16px font-size so iOS Safari doesn't auto-zoom on focus.
+
 > Self-hosted pretext? Add `host="https://your-pretext-deploy.example"`. The
 > SaaS deploy at `pretext.kneox-lab.com` is the default.
 
